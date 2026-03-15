@@ -1,0 +1,74 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: analyses
+    // Document ID: auto-generated
+    // Fields:
+    //   - userId: string (required) - The UID of the user
+    //   - originalText: string (required) - Max 2000 chars
+    //   - suggestedText: string (optional) - Max 2000 chars
+    //   - toneScores: map (required) - Emotional scores
+    //   - createdAt: timestamp (required)
+    //
+    // Collection: team_sentiment
+    // Document ID: YYYY-MM-DD
+    // Fields:
+    //   - date: string (required)
+    //   - averageScores: map (required)
+    //   - count: int (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isAuthenticated() && request.auth.uid == userId;
+    }
+
+    function isValidAnalysis(data) {
+      return data.keys().hasAll(['userId', 'originalText', 'toneScores', 'createdAt']) &&
+             data.userId is string &&
+             data.originalText is string && data.originalText.size() <= 2000 &&
+             data.toneScores is map &&
+             data.createdAt is timestamp;
+    }
+
+    function isValidSentiment(data) {
+      return data.keys().hasAll(['date', 'averageScores', 'count']) &&
+             data.date is string &&
+             data.averageScores is map &&
+             data.count is int;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /analyses/{analysisId} {
+      allow read: if isOwner(resource.data.userId);
+      allow create: if isAuthenticated() && 
+                      isValidAnalysis(request.resource.data) && 
+                      request.resource.data.userId == request.auth.uid;
+      allow update, delete: if false; // Analyses are immutable for history integrity
+    }
+
+    match /team_sentiment/{date} {
+      allow read: if isAuthenticated();
+      allow create, update: if false; // Only updated via backend/admin (simulated for now)
+      allow delete: if false;
+    }
+
+    match /test/connection {
+      allow read: if true;
+    }
+  }
+}

@@ -1,0 +1,63 @@
+{
+  "entities": {
+    "Analysis": {
+      "title": "Analysis",
+      "description": "A record of an emotional analysis of a message.",
+      "type": "object",
+      "properties": {
+        "userId": {
+          "type": "string",
+          "description": "The UID of the user who performed the analysis."
+        },
+        "originalText": {
+          "type": "string",
+          "description": "The original text input by the user."
+        },
+        "suggestedText": {
+          "type": "string",
+          "description": "The AI-suggested rephrased text."
+        },
+        "toneScores": {
+          "type": "object",
+          "description": "A map of emotional dimensions and their scores (0-1)."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time",
+          "description": "When the analysis was performed."
+        }
+      },
+      "required": ["userId", "originalText", "toneScores", "createdAt"]
+    },
+    "TeamSentiment": {
+      "title": "TeamSentiment",
+      "description": "Aggregated sentiment data for a team or organization.",
+      "type": "object",
+      "properties": {
+        "date": {
+          "type": "string",
+          "description": "The date for this aggregate (YYYY-MM-DD)."
+        },
+        "averageScores": {
+          "type": "object",
+          "description": "The average emotional scores for this period."
+        },
+        "count": {
+          "type": "integer",
+          "description": "Total number of analyses included in this aggregate."
+        }
+      },
+      "required": ["date", "averageScores", "count"]
+    }
+  },
+  "firestore": {
+    "analyses": {
+      "schema": "Analysis",
+      "description": "Collection of individual message analyses."
+    },
+    "team_sentiment": {
+      "schema": "TeamSentiment",
+      "description": "Collection of aggregated team sentiment data."
+    }
+  }
+}
