@@ -36,6 +36,16 @@ import {
 } from './firebase';
 import { analyzeTone, AnalysisResult } from './services/gemini';
 import Markdown from 'react-markdown';
+import { 
+  LineChart, 
+  Line, 
+  XAxis, 
+  YAxis, 
+  CartesianGrid, 
+  Tooltip, 
+  ResponsiveContainer, 
+  Legend 
+} from 'recharts';
 
 // Types
 interface AnalysisRecord extends AnalysisResult {
@@ -53,6 +63,8 @@ export default function App() {
   const [history, setHistory] = useState<AnalysisRecord[]>([]);
   const [activeTab, setActiveTab] = useState<'analyze' | 'history' | 'dashboard'>('analyze');
   const [error, setError] = useState<string | null>(null);
+  const [selectedRecord, setSelectedRecord] = useState<AnalysisRecord | null>(null);
+  const [teamSentiment, setTeamSentiment] = useState<any[]>([]);
 
   // Auth Listener
   useEffect(() => {
@@ -86,6 +98,30 @@ export default function App() {
 
     return () => unsubscribe();
   }, [user]);
+
+  // Team Sentiment Listener
+  useEffect(() => {
+    const q = query(
+      collection(db, 'team_sentiment'),
+      orderBy('date', 'asc'),
+      limit(30)
+    );
+
+    const unsubscribe = onSnapshot(q, (snapshot) => {
+      const data = snapshot.docs.map(doc => {
+        const docData = doc.data();
+        return {
+          date: docData.date,
+          ...docData.averageScores
+        };
+      });
+      setTeamSentiment(data);
+    }, (err) => {
+      console.error("Sentiment fetch error:", err);
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   const handleLogin = async () => {
     try {
@@ -370,7 +406,11 @@ export default function App() {
                     history.map((record) => {
                       const topTone = Object.entries(record.toneScores).sort((a, b) => b[1] - a[1])[0];
                       return (
-                        <div key={record.id} className="grid grid-cols-[1fr_2fr_1fr_40px] p-4 items-center hover:bg-[#141414]/5 transition-colors cursor-pointer group">
+                        <div 
+                          key={record.id} 
+                          onClick={() => setSelectedRecord(record)}
+                          className="grid grid-cols-[1fr_2fr_1fr_40px] p-4 items-center hover:bg-[#141414]/5 transition-colors cursor-pointer group"
+                        >
                           <div className="text-[10px] font-mono opacity-50">
                             {record.createdAt?.toDate().toLocaleDateString()}
                           </div>
@@ -406,6 +446,55 @@ export default function App() {
                 <div className="flex items-center gap-2 px-3 py-1 bg-green-100 text-green-700 rounded-full text-[10px] font-mono uppercase font-bold">
                   <div className="h-1.5 w-1.5 rounded-full bg-green-600 animate-pulse" />
                   Live Sentiment
+                </div>
+              </div>
+
+              {/* Sentiment Trend Graph */}
+              <div className="p-8 border border-[#141414] bg-white shadow-[4px_4px_0px_0px_rgba(20,20,20,1)]">
+                <h3 className="text-sm font-mono uppercase tracking-widest font-bold mb-8">Historical Sentiment Trend</h3>
+                <div className="h-[300px] w-full">
+                  {teamSentiment.length > 0 ? (
+                    <ResponsiveContainer width="100%" height="100%">
+                      <LineChart data={teamSentiment}>
+                        <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#14141410" />
+                        <XAxis 
+                          dataKey="date" 
+                          stroke="#141414" 
+                          fontSize={10} 
+                          tickFormatter={(val) => val.split('-').slice(1).join('/')}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <YAxis 
+                          stroke="#141414" 
+                          fontSize={10} 
+                          domain={[0, 1]} 
+                          tickFormatter={(val) => `${Math.round(val * 100)}%`}
+                          tickLine={false}
+                          axisLine={false}
+                        />
+                        <Tooltip 
+                          contentStyle={{ 
+                            backgroundColor: '#fff', 
+                            border: '1px solid #141414',
+                            borderRadius: '0px',
+                            fontSize: '10px',
+                            fontFamily: 'monospace'
+                          }}
+                        />
+                        <Legend iconType="circle" wrapperStyle={{ fontSize: '10px', fontFamily: 'monospace', textTransform: 'uppercase' }} />
+                        <Line type="monotone" dataKey="empathetic" stroke="#3b82f6" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" dataKey="professional" stroke="#141414" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" dataKey="helpful" stroke="#10b981" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                        <Line type="monotone" dataKey="aggressive" stroke="#ef4444" strokeWidth={2} dot={false} activeDot={{ r: 4 }} />
+                      </LineChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-full flex flex-col items-center justify-center text-center opacity-30 font-serif italic">
+                      <BarChart3 size={48} strokeWidth={1} />
+                      <p className="mt-4">Aggregated trend data will appear here as the team uses Nuance.</p>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -470,6 +559,106 @@ export default function App() {
           Nuance AI © 2026 • Built for psychological safety
         </p>
       </footer>
+
+      {/* Detail Modal */}
+      <AnimatePresence>
+        {selectedRecord && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setSelectedRecord(null)}
+              className="absolute inset-0 bg-[#141414]/40 backdrop-blur-sm"
+            />
+            <motion.div 
+              initial={{ opacity: 0, scale: 0.9, y: 20 }}
+              animate={{ opacity: 1, scale: 1, y: 0 }}
+              exit={{ opacity: 0, scale: 0.9, y: 20 }}
+              className="relative w-full max-w-2xl bg-[#E4E3E0] border border-[#141414] shadow-[12px_12px_0px_0px_rgba(20,20,20,1)] overflow-hidden flex flex-col max-h-[90vh]"
+            >
+              <div className="p-6 border-b border-[#141414] flex items-center justify-between bg-white">
+                <div className="space-y-1">
+                  <h3 className="text-xl font-serif italic">Analysis Detail</h3>
+                  <p className="text-[10px] font-mono uppercase opacity-50">
+                    {selectedRecord.createdAt?.toDate().toLocaleString()}
+                  </p>
+                </div>
+                <button 
+                  onClick={() => setSelectedRecord(null)}
+                  className="p-2 hover:bg-[#141414]/5 transition-colors"
+                >
+                  <AlertCircle size={20} className="rotate-45" />
+                </button>
+              </div>
+
+              <div className="p-8 overflow-y-auto space-y-8">
+                {/* Original Text */}
+                <div className="space-y-2">
+                  <label className="text-[10px] font-mono uppercase tracking-widest opacity-50">Original Message</label>
+                  <div className="p-4 bg-white border border-[#141414]/10 text-sm leading-relaxed">
+                    {selectedRecord.originalText}
+                  </div>
+                </div>
+
+                {/* Tone Scores */}
+                <div className="space-y-4">
+                  <label className="text-[10px] font-mono uppercase tracking-widest opacity-50">Tone Breakdown</label>
+                  <div className="grid grid-cols-2 gap-x-8 gap-y-4">
+                    {Object.entries(selectedRecord.toneScores).map(([tone, score]) => (
+                      <div key={tone} className="space-y-1">
+                        <div className="flex justify-between items-end">
+                          <span className="text-[10px] font-mono uppercase tracking-tighter opacity-70">{tone.replace(/([A-Z])/g, ' $1')}</span>
+                          <span className="text-[10px] font-mono">{Math.round(score * 100)}%</span>
+                        </div>
+                        <div className="h-1 bg-[#141414]/10 overflow-hidden">
+                          <motion.div 
+                            initial={{ width: 0 }}
+                            animate={{ width: `${score * 100}%` }}
+                            className={`h-full ${score > 0.6 ? 'bg-orange-500' : 'bg-[#141414]'}`}
+                          />
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Suggestion & Explanation */}
+                <div className="space-y-6 pt-8 border-t border-[#141414]/10">
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-[#141414]">
+                      <Sparkles size={14} className="text-orange-500" />
+                      <span className="text-[10px] font-mono uppercase tracking-widest font-bold">Nuanced Suggestion</span>
+                    </div>
+                    <div className="p-4 bg-white border-l-2 border-[#141414] text-sm italic font-serif leading-relaxed">
+                      "{selectedRecord.suggestedText}"
+                    </div>
+                  </div>
+
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-2 text-[#141414]">
+                      <Info size={14} className="text-blue-500" />
+                      <span className="text-[10px] font-mono uppercase tracking-widest font-bold">AI Explanation</span>
+                    </div>
+                    <div className="text-sm text-[#141414]/80 leading-relaxed bg-[#141414]/5 p-4 border border-[#141414]/10">
+                      {selectedRecord.explanation}
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              <div className="p-4 bg-white border-t border-[#141414] flex justify-end">
+                <button 
+                  onClick={() => setSelectedRecord(null)}
+                  className="px-6 py-2 bg-[#141414] text-white font-mono uppercase text-[10px] tracking-widest hover:bg-[#141414]/90 transition-colors"
+                >
+                  Close Detail
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
